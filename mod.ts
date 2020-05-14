@@ -1,12 +1,11 @@
 import { BufReader, blue, BufWriter, StringReader } from "./deps.ts";
 
-let testReader: Deno.Reader | null = null;
+type Reader = Deno.Reader;
+type Writer = Deno.Writer;
 
-export const setInputForTesting = (inputFromTest: string) => {
-  testReader = new StringReader(inputFromTest);
-};
+type Question = TextQuestion;
 
-interface Ask {
+interface TextQuestion {
   kind: "text";
   question: string;
 }
@@ -16,18 +15,17 @@ interface Answer {
   value: string;
 }
 
-export const ask = async (ask: Ask): Promise<Answer> => {
-  // As a convenience for testing, we allow to set testing input that
-  // we read instead of stdin.
-  let inputReader = testReader === null ? Deno.stdin : testReader;
+type MakeAskOptions = { in: Reader; out: Writer };
+export const makeAsk = (options: MakeAskOptions) => async (
+  question: Question
+): Promise<Answer> => {
+  const bufReader = new BufReader(options.in);
 
-  const reader = new BufReader(inputReader);
-
-  switch (ask.kind) {
+  switch (question.kind) {
     case "text": {
-      const writer = new BufWriter(Deno.stdout);
-      await writer.write(new TextEncoder().encode(blue(ask.question)));
-      const input = await reader.readString("\n");
+      const bufWriter = new BufWriter(options.out);
+      await bufWriter.write(new TextEncoder().encode(blue(question.question)));
+      const input = await bufReader.readString("\n");
 
       if (input === null) throw new Error("invalid input");
       return {
@@ -37,3 +35,6 @@ export const ask = async (ask: Ask): Promise<Answer> => {
     }
   }
 };
+
+type Ask = (question: Question) => Promise<Answer>;
+export const ask: Ask = makeAsk({ in: Deno.stdin, out: Deno.stdout });
